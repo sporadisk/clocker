@@ -3,7 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"local/clocker/filewatcher"
+
+	"github.com/sporadisk/clocker/filewatcher"
 )
 
 const helpMsg = `

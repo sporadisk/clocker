@@ -2,13 +2,13 @@ package filewatcher
 
 import (
 	"fmt"
-	"local/clocker"
 	"log"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/sporadisk/clocker"
 )
 
 func Watch(filePath string) {

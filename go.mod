@@ -1,4 +1,4 @@
-module local/clocker
+module github.com/sporadisk/clocker
 
 go 1.19
 
