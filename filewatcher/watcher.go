@@ -2,6 +2,7 @@ package filewatcher
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"sync"
@@ -78,9 +79,17 @@ func (su *surveyer) reactToFileWrite(filepath string) error {
 		return fmt.Errorf("lp.Init: %w", err)
 	}
 
-	b, err := os.ReadFile(filepath)
+	var b []byte
+
+	f, err := os.Open(filepath)
 	if err != nil {
-		return fmt.Errorf("os.ReadFile: %w", err)
+		return fmt.Errorf("os.Open: %w", err)
+	}
+	defer f.Close()
+
+	b, err = ioutil.ReadAll(f)
+	if err != nil {
+		return fmt.Errorf("ioutil.ReadAll: %w", err)
 	}
 
 	fmt.Print(lp.Summary(string(b)))
