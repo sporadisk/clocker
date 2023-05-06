@@ -1,6 +1,7 @@
 package clocker
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"regexp"
@@ -73,20 +74,24 @@ func (l *LogParser) Init(fullDay string) error {
 	return nil
 }
 
-func (l *LogParser) Summary(input string) string {
+func (l *LogParser) Summary(input string) (string, error) {
 	entries := l.parse(input)
 	calcResult := l.calculate(entries)
 	return l.makeSummary(calcResult)
 }
 
-func (l *LogParser) makeSummary(res calcResult) string {
+var (
+	ErrInvalidInput = errors.New("invalid input")
+)
+
+func (l *LogParser) makeSummary(res calcResult) (string, error) {
 	var sb strings.Builder
 
 	sb.WriteString("\n- Summary / " + formatTimestamp(time.Now()) + " -\n")
 
 	if !res.valid {
 		sb.WriteString("Could not parse input:\n" + res.validationMsg + "\n")
-		return sb.String()
+		return sb.String(), ErrInvalidInput
 	}
 
 	if res.valid {
@@ -113,7 +118,7 @@ func (l *LogParser) makeSummary(res calcResult) string {
 		}
 	}
 
-	return sb.String()
+	return sb.String(), nil
 }
 
 func (l *LogParser) addWarning(w string) {

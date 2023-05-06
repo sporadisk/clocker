@@ -2,7 +2,7 @@ package filewatcher
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"sync"
@@ -79,19 +79,55 @@ func (su *surveyer) reactToFileWrite(filepath string) error {
 		return fmt.Errorf("lp.Init: %w", err)
 	}
 
-	var b []byte
-
-	f, err := os.Open(filepath)
+	b, err := readLoop(filepath)
 	if err != nil {
-		return fmt.Errorf("os.Open: %w", err)
-	}
-	defer f.Close()
-
-	b, err = ioutil.ReadAll(f)
-	if err != nil {
-		return fmt.Errorf("ioutil.ReadAll: %w", err)
+		return fmt.Errorf("readLoop: %w", err)
 	}
 
-	fmt.Print(lp.Summary(string(b)))
+	summary, err := lp.Summary(string(b))
+	fmt.Print(summary)
+
+	if err != nil {
+		if err == clocker.ErrInvalidInput {
+			fmt.Printf("Input: %#v\n", b)
+		}
+		return fmt.Errorf("lp.Summary: %w", err)
+	}
+
 	return nil
+}
+
+// readLoop tries to read the file a lot
+func readLoop(filepath string) ([]byte, error) {
+	for i := 0; i < 100; i++ {
+		f, err := os.Open(filepath)
+		if err != nil {
+			return nil, fmt.Errorf("os.Open: %w", err)
+		}
+		defer f.Close()
+
+		b, err := io.ReadAll(f)
+		if err != nil {
+			return nil, fmt.Errorf("io.ReadAll: %w", err)
+		}
+
+		if b == nil {
+			return nil, fmt.Errorf("io.ReadAll returned nil")
+		}
+
+		if len(b) == 0 {
+			// sometimes we get an empty file, probably because the file is being written to
+			time.Sleep(time.Millisecond * 100)
+			continue
+		}
+
+		// success!
+		if i > 0 {
+			// uncomment for fun debug output
+			// fmt.Printf("readLoop took %d tries to succeed\n", i+1)
+		}
+		return b, nil
+	}
+
+	return nil, fmt.Errorf("readLoop: too many retries")
 }
