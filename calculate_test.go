@@ -47,6 +47,26 @@ func TestCalculate(t *testing.T) {
 		`),
 		newCalcTest("start with end", false, `19:06 - end`),
 		newCalcTest("no valid entries", false, "\n\n\n\t ---"),
+		newCalcTest("tasks with categories", true, `
+			-- sunday 25.05.1975
+			08:02 - Debate: Can swallows carry coconuts?
+			08:12 - Fetch: Excalibur
+			12:00 - Pause
+
+			12:15 - Combat: The Black Knight
+			12:30 - Meeting: Witch Trial
+			12:36 - Travel: Camelot
+			13:37 - Travel: Occupied Castle
+			14:24 - Debate: The French Taunter
+			14:44 - Travel: Separate ways
+			15:10 - Business: The Knights who until recently said Ni
+			15:30 - Travel: Sacred Cave
+			15:55 - Combat: The Rabbit of Caerbannog
+			16:00 - Travel: Bridge of Death
+			16:45 - Meeting: Bridgekeeper
+			16:50 - Travel: Castle Aarrgh
+			17:30 - Done
+		`).expectCategory("travel", "4h 4m").expectCategory("combat", "20m").expectCategory("debate", "30m").expectDate(25, 05, 1975),
 	}
 
 	lp := LogParser{}
@@ -99,6 +119,39 @@ func TestCalculate(t *testing.T) {
 
 				if !test.expect.fullDayAt.Equal(*calcResult.fullDayAt) {
 					t.Errorf("fullDay mismatch - expected %s, got %s", formatTimestamp(*test.expect.fullDayAt), formatTimestamp(*calcResult.fullDayAt))
+				}
+			}
+
+			for _, ec := range test.expect.categories {
+				found := false
+				for _, ac := range calcResult.categories {
+					if ec.matchName(ac.name) {
+						found = true
+						if ec.timeWorked != ac.timeWorked {
+							t.Errorf("category %q duration mismatch: expected %s, got %s", ec.name, ec.timeWorked.String(), ac.timeWorked.String())
+						}
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected category %q not found in results", ec.name)
+				}
+			}
+
+			if test.expect.date != nil {
+				if calcResult.date == nil {
+					t.Errorf("expected date, but got nil")
+					return
+				}
+
+				dayMatch := test.expect.date.day == calcResult.date.day
+				monthMatch := test.expect.date.month == calcResult.date.month
+				yearMatch := test.expect.date.year == calcResult.date.year
+
+				if !dayMatch || !monthMatch || !yearMatch {
+					t.Errorf("date mismatch: expected %02d.%02d.%04d, got %02d.%02d.%04d",
+						test.expect.date.day, test.expect.date.month, test.expect.date.year,
+						calcResult.date.day, calcResult.date.month, calcResult.date.year)
 				}
 			}
 		})
@@ -154,5 +207,26 @@ func (ct *calcTest) expectSurplus(sus string) *calcTest {
 		log.Panicf(`failed to parse duration string "%s": %s`, sus, err.Error())
 	}
 	ct.expect.surplus = &sur
+	return ct
+}
+
+func (ct *calcTest) expectCategory(name string, dur string) *calcTest {
+	d, err := parseDuration(dur)
+	if err != nil {
+		log.Panicf(`failed to parse duration string "%s": %s`, dur, err.Error())
+	}
+	ct.expect.categories = append(ct.expect.categories, resultCategory{
+		name:       name,
+		timeWorked: d,
+	})
+	return ct
+}
+
+func (ct *calcTest) expectDate(day, month, year int) *calcTest {
+	ct.expect.date = &logDate{
+		day:   day,
+		month: month,
+		year:  year,
+	}
 	return ct
 }

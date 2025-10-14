@@ -18,14 +18,17 @@ const (
 )
 
 type LogParser struct {
-	startPattern  *regexp.Regexp
-	stopPattern   *regexp.Regexp
-	flexPattern   *regexp.Regexp
-	targetPattern *regexp.Regexp
-	outputPattern *regexp.Regexp
-	warnings      []string
-	fullDay       time.Duration
-	outputFormat  string // the format to use for durations
+	startPattern    *regexp.Regexp
+	stopPattern     *regexp.Regexp
+	catTsPattern    *regexp.Regexp
+	flexPattern     *regexp.Regexp
+	targetPattern   *regexp.Regexp
+	outputPattern   *regexp.Regexp
+	fullDatePattern *regexp.Regexp
+	dayMonthPattern *regexp.Regexp
+	warnings        []string
+	fullDay         time.Duration
+	outputFormat    string // the format to use for durations
 }
 
 func (l *LogParser) Init(fullDay string) error {
@@ -40,6 +43,24 @@ func (l *LogParser) Init(fullDay string) error {
 		return fmt.Errorf("failed to compile stop pattern: %w", err)
 	}
 	l.stopPattern = stopPattern
+
+	catTimestampPattern, err := regexp.Compile(categorizedTimestampRegex)
+	if err != nil {
+		return fmt.Errorf("failed to compile categorized timestamp pattern: %w", err)
+	}
+	l.catTsPattern = catTimestampPattern
+
+	fullDatePattern, err := regexp.Compile(fullDatePatternRegex)
+	if err != nil {
+		return fmt.Errorf("failed to compile full date pattern: %w", err)
+	}
+	l.fullDatePattern = fullDatePattern
+
+	dayMonthPattern, err := regexp.Compile(dayMonthPatternRegex)
+	if err != nil {
+		return fmt.Errorf("failed to compile day pattern: %w", err)
+	}
+	l.dayMonthPattern = dayMonthPattern
 
 	flexPattern, err := regexp.Compile(flexPatternRegex)
 	if err != nil {
@@ -87,14 +108,21 @@ var (
 func (l *LogParser) makeSummary(res calcResult) (string, error) {
 	var sb strings.Builder
 
-	sb.WriteString("\n- Summary / " + formatTimestamp(time.Now()) + " -\n")
-
 	if !res.valid {
 		sb.WriteString("Could not parse input:\n" + res.validationMsg + "\n")
 		return sb.String(), ErrInvalidInput
 	}
 
 	if res.valid {
+		sb.WriteString("\n- Summary / " + summaryDate(&res) + " -\n")
+
+		if len(res.categories) > 0 {
+			sb.WriteString("\nCategories:\n")
+			for _, c := range res.categories {
+				sb.WriteString(fmt.Sprintf(" - %s: %s\n", c.name, l.formatDuration(c.timeWorked)))
+			}
+			sb.WriteString("\n")
+		}
 
 		sb.WriteString("Worked: " + l.formatDuration(res.timeWorked) + "\n")
 
@@ -202,6 +230,19 @@ func formatDurationHMS(d time.Duration) string {
 	}
 
 	return sb.String()
+}
+
+func summaryDate(res *calcResult) string {
+
+	if res.date == nil || res.date.day == 0 || res.date.month == 0 {
+		return formatTimestamp(time.Now())
+	}
+
+	if res.date.year == 0 {
+		res.date.year = time.Now().Year()
+	}
+
+	return fmt.Sprintf("%02d.%02d.%d", res.date.day, res.date.month, res.date.year)
 }
 
 func removeSpaces(s string) string {

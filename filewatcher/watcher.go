@@ -89,7 +89,7 @@ func (su *surveyer) reactToFileWrite(filepath string) error {
 
 	if err != nil {
 		if err == clocker.ErrInvalidInput {
-			fmt.Printf("Input: %#v\n", b)
+			fmt.Printf("Input: %q\n", string(b))
 		}
 		return fmt.Errorf("lp.Summary: %w", err)
 	}
