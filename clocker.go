@@ -242,7 +242,7 @@ func summaryDate(res *calcResult) string {
 		res.date.year = time.Now().Year()
 	}
 
-	return fmt.Sprintf("%02d.%02d.%d", res.date.day, res.date.month, res.date.year)
+	return fmt.Sprintf("%s %02d.%02d.%d", res.date.dayName, res.date.day, res.date.month, res.date.year)
 }
 
 func removeSpaces(s string) string {

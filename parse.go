@@ -55,6 +55,7 @@ type clockEntry struct {
 	timestamp  *time.Time
 	duration   *time.Duration
 	lineNumber int
+	dayName    string
 	day        int
 	month      int
 	year       int
@@ -152,6 +153,7 @@ func (l *LogParser) parseLine(text string, lineNumber int) (valid bool, entry cl
 			l.addWarningf("error parsing full date from value %#v: %s", fullDateMatches[0], err.Error())
 			return false, clockEntry{}
 		}
+		entry.dayName = fullDateMatches[1]
 		entry.day = day
 		entry.month = month
 		entry.year = year
@@ -168,6 +170,7 @@ func (l *LogParser) parseLine(text string, lineNumber int) (valid bool, entry cl
 			l.addWarningf("error parsing day and month from value %#v: %s", dayMatches[0], err.Error())
 			return false, clockEntry{}
 		}
+		entry.dayName = dayMatches[1]
 		entry.day = day
 		entry.month = month
 		entry.year = time.Now().Year() // default to current year

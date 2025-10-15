@@ -32,9 +32,10 @@ type calcResult struct {
 }
 
 type logDate struct {
-	day   int
-	month int
-	year  int
+	dayName string
+	day     int
+	month   int
+	year    int
 }
 
 func (cr *calcResult) addCategory(name string, dur time.Duration) {
@@ -122,9 +123,10 @@ func (l *LogParser) calculate(entries []clockEntry) calcResult {
 
 		if entry.action == actionSetDay {
 			calc.currentDate = logDate{
-				day:   entry.day,
-				month: entry.month,
-				year:  entry.year,
+				dayName: entry.dayName,
+				day:     entry.day,
+				month:   entry.month,
+				year:    entry.year,
 			}
 		}
 
@@ -265,9 +267,10 @@ func (c *calculator) sumResults(fullDay time.Duration) calcResult {
 
 	if c.currentDate.day != 0 && c.currentDate.month != 0 {
 		res.date = &logDate{
-			day:   c.currentDate.day,
-			month: c.currentDate.month,
-			year:  c.currentDate.year,
+			dayName: c.currentDate.dayName,
+			day:     c.currentDate.day,
+			month:   c.currentDate.month,
+			year:    c.currentDate.year,
 		}
 	}
 
