@@ -31,8 +31,8 @@ const (
 	flexPatternRegex          = `(?i)^\s*flex:\s*([\dhm ]+)`
 	targetPatternRegex        = `(?i)^\s*(target|full day|workday):\s*([\dhm ]+)`
 	outputPatternRegex        = `(?i)^\s*(output|format):\s*(hms|hm|m)`
-	fullDatePatternRegex      = `^\s*--\s*(\w+)\s+(\d+)\.(\d+)\.(\d+)`
-	dayMonthPatternRegex      = `^\s*--\s*(\w+)\s+(\d+)\.(\d+)`
+	fullDatePatternRegex      = `^\s*--\s*(\p{L}+)\s+(\d+)\.(\d+)\.(\d+)`
+	dayMonthPatternRegex      = `^\s*--\s*(\p{L}+)\s+(\d+)\.(\d+)`
 
 	commandFlex = "flex"
 )
