@@ -1,6 +1,10 @@
-package clocker
+package logfile
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/sporadisk/clocker/logentry"
+)
 
 func TestParse(t *testing.T) {
 	testText := `
@@ -20,13 +24,13 @@ func TestParse(t *testing.T) {
 	expected := []string{"target", "flex", "on", "off", "on", "off", "on", "off"}
 
 	lp := LogParser{}
-	err := lp.Init("")
+	err := lp.Init()
 	if err != nil {
 		t.Errorf("lp.Init: %s", err.Error())
 		return
 	}
 
-	entries := lp.parse(testText)
+	entries := lp.Parse(testText)
 	//t.Logf("entries: %#v", entries)
 
 	if len(entries) != len(expected) {
@@ -35,8 +39,8 @@ func TestParse(t *testing.T) {
 	}
 
 	for i, entry := range entries {
-		if entry.action != expected[i] {
-			t.Errorf("wrong action for entry %d: expected %s, got %s", i, expected[i], entry.action)
+		if entry.Action != expected[i] {
+			t.Errorf("wrong action for entry %d: expected %s, got %s", i, expected[i], entry.Action)
 		}
 	}
 }
@@ -61,17 +65,17 @@ func TestParseCategories(t *testing.T) {
 	expectedMonth := 8
 	expectedTasks := []string{"", "", "", "Cows", "Sheep", "Chickens", "", "Corn", "Wheat", ""}
 	expectedActions := []string{
-		actionSetDay,
-		actionTarget,
-		actionClockIn,
-		actionStartTask,
-		actionStartTask,
-		actionStartTask,
-		actionClockOut,
+		logentry.ActionSetDay,
+		logentry.ActionTarget,
+		logentry.ActionClockIn,
+		logentry.ActionStartTask,
+		logentry.ActionStartTask,
+		logentry.ActionStartTask,
+		logentry.ActionClockOut,
 
-		actionStartTask,
-		actionStartTask,
-		actionClockOut,
+		logentry.ActionStartTask,
+		logentry.ActionStartTask,
+		logentry.ActionClockOut,
 	}
 
 	if len(expectedTasks) != len(expectedActions) {
@@ -80,13 +84,13 @@ func TestParseCategories(t *testing.T) {
 	}
 
 	lp := LogParser{}
-	err := lp.Init("")
+	err := lp.Init()
 	if err != nil {
 		t.Errorf("lp.Init: %s", err.Error())
 		return
 	}
 
-	entries := lp.parse(testText)
+	entries := lp.Parse(testText)
 
 	if len(entries) != len(expectedTasks) {
 		t.Errorf("entry length mismatch: expected %d, got %d", len(expectedTasks), len(entries))
@@ -97,22 +101,22 @@ func TestParseCategories(t *testing.T) {
 
 	for i, entry := range entries {
 
-		if entry.action == actionSetDay {
+		if entry.Action == logentry.ActionSetDay {
 			gotDay = true
-			if entry.day != expectedDay {
-				t.Errorf("wrong day: expected %d, got %d", expectedDay, entry.day)
+			if entry.Day != expectedDay {
+				t.Errorf("wrong day: expected %d, got %d", expectedDay, entry.Day)
 			}
-			if entry.month != expectedMonth {
-				t.Errorf("wrong month: expected %d, got %d", expectedMonth, entry.month)
+			if entry.Month != expectedMonth {
+				t.Errorf("wrong month: expected %d, got %d", expectedMonth, entry.Month)
 			}
 		}
 
-		if entry.task != expectedTasks[i] {
-			t.Errorf("wrong task for entry %d: expected %q, got %q", i, expectedTasks[i], entry.task)
+		if entry.Task != expectedTasks[i] {
+			t.Errorf("wrong task for entry %d: expected %q, got %q", i, expectedTasks[i], entry.Task)
 		}
 
-		if entry.action != expectedActions[i] {
-			t.Errorf("wrong action for entry %d: expected %q, got %q", i, expectedActions[i], entry.action)
+		if entry.Action != expectedActions[i] {
+			t.Errorf("wrong action for entry %d: expected %q, got %q", i, expectedActions[i], entry.Action)
 		}
 	}
 

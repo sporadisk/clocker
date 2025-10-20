@@ -1,8 +1,13 @@
-package clocker
+package test
 
 import (
 	"log"
 	"testing"
+
+	"github.com/sporadisk/clocker/calculator"
+	"github.com/sporadisk/clocker/client/logfile"
+	"github.com/sporadisk/clocker/format"
+	"github.com/sporadisk/clocker/summary"
 )
 
 func TestCalculate(t *testing.T) {
@@ -69,89 +74,95 @@ func TestCalculate(t *testing.T) {
 		`).expectCategory("travel", "4h 4m").expectCategory("combat", "20m").expectCategory("debate", "30m").expectDate(25, 05, 1975),
 	}
 
-	lp := LogParser{}
-	err := lp.Init("")
+	lp := logfile.LogParser{}
+	err := lp.Init()
 	if err != nil {
 		t.Errorf("lp.Init: %s", err.Error())
 		return
 	}
 
+	defaultFullDay, err := format.ParseDuration("450m")
+	if err != nil {
+		t.Errorf("failed to parse default full day duration: %s", err.Error())
+		return
+	}
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			entries := lp.parse(test.input)
-			calcResult := lp.calculate(entries)
-			if calcResult.valid != test.expect.valid {
-				t.Errorf("validation mismatch: expected %t, got %t", test.expect.valid, calcResult.valid)
-				if !calcResult.valid {
-					t.Errorf("validation error: %s", calcResult.validationMsg)
+			entries := lp.Parse(test.input)
+			calcResult := calculator.LogSum(entries, defaultFullDay)
+			if calcResult.Valid != test.expect.Valid {
+				t.Errorf("validation mismatch: expected %t, got %t", test.expect.Valid, calcResult.Valid)
+				if !calcResult.Valid {
+					t.Errorf("validation error: %s", calcResult.ValidationMsg)
 				}
 				return
 			}
 
-			if test.expect.surplus != nil {
-				if calcResult.surplus == nil {
+			if test.expect.Surplus != nil {
+				if calcResult.Surplus == nil {
 					t.Errorf("expected a surplus, but did not get one")
 					return
 				}
-				if *test.expect.surplus != *calcResult.surplus {
-					t.Errorf("surplus mismatch: expected %s, got %s", test.expect.surplus.String(), calcResult.surplus.String())
+				if *test.expect.Surplus != *calcResult.Surplus {
+					t.Errorf("surplus mismatch: expected %s, got %s", test.expect.Surplus.String(), calcResult.Surplus.String())
 					return
 				}
 			}
 
-			if test.expect.timeLeft != nil {
-				if calcResult.timeLeft == nil {
+			if test.expect.TimeLeft != nil {
+				if calcResult.TimeLeft == nil {
 					t.Errorf("expected timeLeft, but got nil")
 					return
 				}
 
-				if *test.expect.timeLeft != *calcResult.timeLeft {
-					t.Errorf("timeLeft mismatch: expected %s, got %s", test.expect.timeLeft.String(), calcResult.timeLeft.String())
+				if *test.expect.TimeLeft != *calcResult.TimeLeft {
+					t.Errorf("timeLeft mismatch: expected %s, got %s", test.expect.TimeLeft.String(), calcResult.TimeLeft.String())
 					return
 				}
 			}
 
-			if test.expect.fullDayAt != nil {
-				if calcResult.fullDayAt == nil {
+			if test.expect.FullDayAt != nil {
+				if calcResult.FullDayAt == nil {
 					t.Errorf("expected fullDay, but got nil")
 					return
 				}
 
-				if !test.expect.fullDayAt.Equal(*calcResult.fullDayAt) {
-					t.Errorf("fullDay mismatch - expected %s, got %s", formatTimestamp(*test.expect.fullDayAt), formatTimestamp(*calcResult.fullDayAt))
+				if !test.expect.FullDayAt.Equal(*calcResult.FullDayAt) {
+					t.Errorf("fullDay mismatch - expected %s, got %s", format.Timestamp(*test.expect.FullDayAt), format.Timestamp(*calcResult.FullDayAt))
 				}
 			}
 
-			for _, ec := range test.expect.categories {
+			for _, ec := range test.expect.Categories {
 				found := false
-				for _, ac := range calcResult.categories {
-					if ec.matchName(ac.name) {
+				for _, ac := range calcResult.Categories {
+					if ec.MatchName(ac.Name) {
 						found = true
-						if ec.timeWorked != ac.timeWorked {
-							t.Errorf("category %q duration mismatch: expected %s, got %s", ec.name, ec.timeWorked.String(), ac.timeWorked.String())
+						if ec.TimeWorked != ac.TimeWorked {
+							t.Errorf("category %q duration mismatch: expected %s, got %s", ec.Name, ec.TimeWorked.String(), ac.TimeWorked.String())
 						}
 						break
 					}
 				}
 				if !found {
-					t.Errorf("expected category %q not found in results", ec.name)
+					t.Errorf("expected category %q not found in results", ec.Name)
 				}
 			}
 
-			if test.expect.date != nil {
-				if calcResult.date == nil {
+			if test.expect.Date != nil {
+				if calcResult.Date == nil {
 					t.Errorf("expected date, but got nil")
 					return
 				}
 
-				dayMatch := test.expect.date.day == calcResult.date.day
-				monthMatch := test.expect.date.month == calcResult.date.month
-				yearMatch := test.expect.date.year == calcResult.date.year
+				dayMatch := test.expect.Date.Day == calcResult.Date.Day
+				monthMatch := test.expect.Date.Month == calcResult.Date.Month
+				yearMatch := test.expect.Date.Year == calcResult.Date.Year
 
 				if !dayMatch || !monthMatch || !yearMatch {
 					t.Errorf("date mismatch: expected %02d.%02d.%04d, got %02d.%02d.%04d",
-						test.expect.date.day, test.expect.date.month, test.expect.date.year,
-						calcResult.date.day, calcResult.date.month, calcResult.date.year)
+						test.expect.Date.Day, test.expect.Date.Month, test.expect.Date.Year,
+						calcResult.Date.Day, calcResult.Date.Month, calcResult.Date.Year)
 				}
 			}
 		})
@@ -161,72 +172,72 @@ func TestCalculate(t *testing.T) {
 type calcTest struct {
 	name   string
 	input  string
-	expect calcResult
+	expect summary.Summary
 }
 
 func newCalcTest(name string, valid bool, input string) *calcTest {
 	return &calcTest{
 		name:  name,
 		input: input,
-		expect: calcResult{
-			valid: valid,
+		expect: summary.Summary{
+			Valid: valid,
 		},
 	}
 }
 
 func (ct *calcTest) expectTimeWorked(tw string) *calcTest {
-	twd, err := parseDuration(tw)
+	twd, err := format.ParseDuration(tw)
 	if err != nil {
 		log.Panicf(`failed to parse duration string "%s": %s`, tw, err.Error())
 	}
-	ct.expect.timeWorked = twd
+	ct.expect.TimeWorked = twd
 	return ct
 }
 
 func (ct *calcTest) expectTimeLeft(tl string) *calcTest {
-	tld, err := parseDuration(tl)
+	tld, err := format.ParseDuration(tl)
 	if err != nil {
 		log.Panicf(`failed to parse duration string "%s": %s`, tl, err.Error())
 	}
-	ct.expect.timeLeft = &tld
+	ct.expect.TimeLeft = &tld
 	return ct
 }
 
 func (ct *calcTest) expectFullDay(ts string) *calcTest {
-	fd, err := parseTimestamp(ts)
+	fd, err := format.ParseTimestamp(ts)
 	if err != nil {
 		log.Panicf(`failed to parse time string "%s": %s`, ts, err.Error())
 	}
-	ct.expect.fullDayAt = &fd
+	ct.expect.FullDayAt = &fd
 	return ct
 }
 
 func (ct *calcTest) expectSurplus(sus string) *calcTest {
-	sur, err := parseDuration(sus)
+	sur, err := format.ParseDuration(sus)
 	if err != nil {
 		log.Panicf(`failed to parse duration string "%s": %s`, sus, err.Error())
 	}
-	ct.expect.surplus = &sur
+	ct.expect.Surplus = &sur
 	return ct
 }
 
 func (ct *calcTest) expectCategory(name string, dur string) *calcTest {
-	d, err := parseDuration(dur)
+	d, err := format.ParseDuration(dur)
 	if err != nil {
 		log.Panicf(`failed to parse duration string "%s": %s`, dur, err.Error())
 	}
-	ct.expect.categories = append(ct.expect.categories, resultCategory{
-		name:       name,
-		timeWorked: d,
+	ct.expect.Categories = append(ct.expect.Categories, summary.ResultCategory{
+		Name:       name,
+		TimeWorked: d,
 	})
 	return ct
 }
 
 func (ct *calcTest) expectDate(day, month, year int) *calcTest {
-	ct.expect.date = &logDate{
-		day:   day,
-		month: month,
-		year:  year,
+	ct.expect.Date = &summary.Date{
+		Day:   day,
+		Month: month,
+		Year:  year,
 	}
 	return ct
 }
