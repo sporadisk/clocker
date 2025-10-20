@@ -5,6 +5,10 @@ import (
 	"time"
 )
 
+const (
+	Uncategorized = "uncategorized"
+)
+
 type Summary struct {
 	Valid         bool
 	ValidationMsg string

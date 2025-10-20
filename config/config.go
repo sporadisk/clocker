@@ -12,6 +12,7 @@ type Config struct {
 	DefaulltFullDay string          `yaml:"defaultFullDay"`
 	Exporter        *ExporterConfig `yaml:"exporter"`
 	Output          *OutputConfig   `yaml:"output"`
+	Calc            *CalcConfig     `yaml:"calculator"`
 }
 
 type ExporterConfig struct {
@@ -24,9 +25,12 @@ type OutputConfig struct {
 	Params map[string]string `yaml:"params"`
 }
 
+type CalcConfig struct {
+	CategoryParseMode string `yaml:"categoryParseMode"`
+}
+
 func Load(path string) (*Config, error) {
-	var useDefaultConf bool
-	useDefaultConf = (path == "")
+	useDefaultConf := (path == "")
 
 	if useDefaultConf {
 		path = ".clocker.yaml"

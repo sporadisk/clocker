@@ -7,15 +7,17 @@ import (
 	"github.com/sporadisk/clocker/config"
 	"github.com/sporadisk/clocker/event"
 	"github.com/sporadisk/clocker/logentry"
+	"github.com/sporadisk/clocker/parameter"
 	"github.com/sporadisk/clocker/summary"
 )
 
 type Calculator struct {
-	Conf           *config.Config
-	EventExporter  event.Exporter
-	Subscriber     logentry.Subscriber
-	SummaryOutput  summary.Output
-	DefaultFullDay time.Duration
+	Conf              *config.Config
+	EventExporter     event.Exporter
+	Subscriber        logentry.Subscriber
+	SummaryOutput     summary.Output
+	DefaultFullDay    time.Duration
+	CategoryParseMode string
 }
 
 func (c *Calculator) Start() error {
@@ -39,6 +41,14 @@ func (c *Calculator) Start() error {
 		return fmt.Errorf("LoadSummaryOutput: %w", err)
 	}
 
+	if c.Conf.Calc != nil && c.Conf.Calc.CategoryParseMode != "" {
+		parseMode, err := parameter.Validate(c.Conf.Calc.CategoryParseMode, []string{"v1", "v2"})
+		if err != nil {
+			return fmt.Errorf("validation failure for category parse mode: %w", err)
+		}
+		c.CategoryParseMode = parseMode
+	}
+
 	err = c.Subscriber.Subscribe(c)
 	if err != nil {
 		return fmt.Errorf("Subscriber.Subscribe: %w", err)
@@ -47,8 +57,13 @@ func (c *Calculator) Start() error {
 }
 
 func (c *Calculator) Receive(entries []logentry.Entry) error {
-	summary := LogSum(entries, c.DefaultFullDay)
-	err := c.SummaryOutput.OutputSummary(summary)
+	summary := &LogSummary{
+		Entries:      entries,
+		FullDay:      c.DefaultFullDay,
+		CatParseMode: c.CategoryParseMode,
+	}
+
+	err := c.SummaryOutput.OutputSummary(summary.Sum())
 	if err != nil {
 		return fmt.Errorf("SummaryOutput.Output: %w", err)
 	}

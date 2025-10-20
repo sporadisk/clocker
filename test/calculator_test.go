@@ -90,7 +90,11 @@ func TestCalculate(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			entries := lp.Parse(test.input)
-			calcResult := calculator.LogSum(entries, defaultFullDay)
+			summary := &calculator.LogSummary{
+				Entries: entries,
+				FullDay: defaultFullDay,
+			}
+			calcResult := summary.Sum()
 			if calcResult.Valid != test.expect.Valid {
 				t.Errorf("validation mismatch: expected %t, got %t", test.expect.Valid, calcResult.Valid)
 				if !calcResult.Valid {

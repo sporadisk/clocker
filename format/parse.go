@@ -24,3 +24,7 @@ func RemoveSpaces(s string) string {
 	}
 	return b.String()
 }
+
+func CleanParam(param string) string {
+	return strings.ToLower(strings.TrimSpace(param))
+}

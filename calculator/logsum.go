@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sporadisk/clocker/event"
+	"github.com/sporadisk/clocker/format"
 	"github.com/sporadisk/clocker/logentry"
 	"github.com/sporadisk/clocker/summary"
 )
@@ -19,7 +20,12 @@ const (
 	stateTarget     = "target"
 )
 
-type logSummary struct {
+type LogSummary struct {
+	// input
+	Entries      []logentry.Entry
+	FullDay      time.Duration
+	CatParseMode string
+
 	logState         string
 	lastOn           time.Time
 	lastOff          time.Time
@@ -29,73 +35,75 @@ type logSummary struct {
 	currentCategory  string
 	currentTask      string
 	currentDate      summary.Date
-	fullDay          time.Duration
 	events           []event.Event
 }
 
-func LogSum(entries []logentry.Entry, fullDay time.Duration) summary.Summary {
+func (ls *LogSummary) Sum() summary.Summary {
 
-	sum := logSummary{
-		logState:         stateInit,
-		lastOn:           time.Time{},
-		lastOff:          time.Time{},
-		durations:        []time.Duration{},
-		taskCatDurations: map[string]time.Duration{},
-		prevCommand:      "--start of document--",
-		fullDay:          fullDay,
+	ls.logState = stateInit
+	ls.lastOn = time.Time{}
+	ls.lastOff = time.Time{}
+	ls.durations = []time.Duration{}
+	ls.taskCatDurations = map[string]time.Duration{}
+	ls.prevCommand = "--start of document--"
+
+	if ls.CatParseMode != "" {
+		ls.CatParseMode = format.CleanParam(ls.CatParseMode)
+	} else {
+		ls.CatParseMode = "v1"
 	}
 
-	if len(entries) == 0 {
+	if len(ls.Entries) == 0 {
 		return summary.Summary{
 			Valid:         false,
 			ValidationMsg: "No valid time entries detected.",
 		}
 	}
 
-	for _, entry := range entries {
+	for _, entry := range ls.Entries {
 		if entry.Action == logentry.ActionClockIn {
-			success, res := sum.clockIn(entry)
+			success, res := ls.clockIn(entry)
 			if !success {
 				return res
 			}
 		}
 
 		if entry.Action == logentry.ActionStartTask {
-			category, task := parseCategoryAndTask(entry.Task)
-			success, res := sum.startTask(entry, category, task)
+			category, task := ls.parseCategoryAndTask(entry.Task)
+			success, res := ls.startTask(entry, category, task)
 			if !success {
 				return res
 			}
 		}
 
 		if entry.Action == logentry.ActionClockOut {
-			success, res := sum.clockOut(entry)
+			success, res := ls.clockOut(entry)
 			if !success {
 				return res
 			}
 		}
 
 		if entry.Action == logentry.ActionFlex {
-			success, res := sum.flex(entry)
+			success, res := ls.flex(entry)
 			if !success {
 				return res
 			}
 		}
 
 		if entry.Action == logentry.ActionTarget {
-			if sum.logState == stateOn {
+			if ls.logState == stateOn {
 				return summary.Summary{
 					Valid:         false,
 					ValidationMsg: fmt.Sprintf(`"%s" entry on line %d follows a clock-in, which is wrong.`, entry.Command, entry.LineNumber),
 				}
 			}
 
-			sum.logState = stateTarget
-			sum.fullDay = *entry.Duration
+			ls.logState = stateTarget
+			ls.FullDay = *entry.Duration
 		}
 
 		if entry.Action == logentry.ActionSetDay {
-			sum.currentDate = summary.Date{
+			ls.currentDate = summary.Date{
 				DayName: entry.DayName,
 				Day:     entry.Day,
 				Month:   entry.Month,
@@ -103,186 +111,199 @@ func LogSum(entries []logentry.Entry, fullDay time.Duration) summary.Summary {
 			}
 		}
 
-		sum.prevCommand = entry.Command
+		ls.prevCommand = entry.Command
 	}
 
 	// validation and duration collection complete: Time to calculate
-	return sum.summarize()
+	return ls.summarize()
 }
 
-func (c *logSummary) clockOut(entry logentry.Entry) (success bool, result summary.Summary) {
-	if c.logState != stateOn {
+func (ls *LogSummary) clockOut(entry logentry.Entry) (success bool, result summary.Summary) {
+	if ls.logState != stateOn {
 		return false, summary.Summary{
 			Valid:         false,
-			ValidationMsg: fmt.Sprintf(`Clock-out at %s on line %d follows "%s", should follow a clock-in`, entry.Timestamp.Format(timestampFormat), entry.LineNumber, c.logState),
+			ValidationMsg: fmt.Sprintf(`Clock-out at %s on line %d follows "%s", should follow a clock-in`, entry.Timestamp.Format(timestampFormat), entry.LineNumber, ls.logState),
 		}
 	}
 
-	if !entry.Timestamp.After(c.lastOn) {
+	if !entry.Timestamp.After(ls.lastOn) {
 		return false, summary.Summary{
 			Valid:         false,
-			ValidationMsg: fmt.Sprintf(`Clock-out on line %d has an earlier timestamp than its corresponding "%s"`, entry.LineNumber, c.prevCommand),
+			ValidationMsg: fmt.Sprintf(`Clock-out on line %d has an earlier timestamp than its corresponding "%s"`, entry.LineNumber, ls.prevCommand),
 		}
 	}
 
-	c.lastOff = *entry.Timestamp
-	c.logState = stateOff
-	c.durations = append(c.durations, entry.Timestamp.Sub(c.lastOn))
+	ls.lastOff = *entry.Timestamp
+	ls.logState = stateOff
+	ls.durations = append(ls.durations, entry.Timestamp.Sub(ls.lastOn))
 
-	if c.currentCategory != "" {
-		c.addToCategory(c.currentCategory, entry.Timestamp.Sub(c.lastOn))
+	if ls.currentCategory != "" {
+		ls.addToCategory(ls.currentCategory, entry.Timestamp.Sub(ls.lastOn))
 	}
 
 	// reset current task and category
-	c.currentTask = ""
-	c.currentCategory = ""
+	ls.currentTask = ""
+	ls.currentCategory = ""
 
 	return true, summary.Summary{}
 }
 
-func (c *logSummary) addToCategory(cat string, dur time.Duration) {
+func (ls *LogSummary) addToCategory(cat string, dur time.Duration) {
 	if cat == "" {
 		return
 	}
 
-	_, ok := c.taskCatDurations[cat]
+	_, ok := ls.taskCatDurations[cat]
 	if !ok {
-		c.taskCatDurations[cat] = 0
+		ls.taskCatDurations[cat] = 0
 	}
 
-	c.taskCatDurations[cat] += dur
+	ls.taskCatDurations[cat] += dur
 }
 
-func (c *logSummary) clockIn(entry logentry.Entry) (success bool, result summary.Summary) {
-	if c.logState == stateOn {
+func (ls *LogSummary) clockIn(entry logentry.Entry) (success bool, result summary.Summary) {
+	if ls.logState == stateOn {
 		return false, summary.Summary{
 			Valid:         false,
 			ValidationMsg: fmt.Sprintf(`Duplicate clock-in on line %d`, entry.LineNumber),
 		}
 	}
 
-	if entry.Timestamp.Before(c.lastOff) && !c.lastOff.IsZero() {
+	if entry.Timestamp.Before(ls.lastOff) && !ls.lastOff.IsZero() {
 		return false, summary.Summary{
 			Valid: false,
 			ValidationMsg: fmt.Sprintf(`Clock-in at %s on line %d occurs prior to the previous clock-out (%s)`,
 				entry.Timestamp.Format(timestampFormat),
 				entry.LineNumber,
-				c.lastOff.Format(timestampFormat),
+				ls.lastOff.Format(timestampFormat),
 			),
 		}
 	}
 
-	c.lastOn = *entry.Timestamp
-	c.logState = stateOn
+	ls.lastOn = *entry.Timestamp
+	ls.logState = stateOn
 
 	return true, summary.Summary{}
 }
 
-func (c *logSummary) startTask(entry logentry.Entry, category, task string) (success bool, result summary.Summary) {
+func (ls *LogSummary) startTask(entry logentry.Entry, category, task string) (success bool, result summary.Summary) {
 	// We're already clocked in, probably on another task
 	// Clock out of the previous task first
-	if c.logState == stateOn {
-		success, res := c.clockOut(entry)
+	if ls.logState == stateOn {
+		success, res := ls.clockOut(entry)
 		if !success {
 			return false, res
 		}
 	}
 
-	c.currentTask = task
-	c.currentCategory = category
+	ls.currentTask = task
+	ls.currentCategory = category
 
-	return c.clockIn(entry)
+	return ls.clockIn(entry)
 }
 
-func (c *logSummary) flex(entry logentry.Entry) (success bool, result summary.Summary) {
-	if c.logState == stateOn {
+func (ls *LogSummary) flex(entry logentry.Entry) (success bool, result summary.Summary) {
+	if ls.logState == stateOn {
 		return false, summary.Summary{
 			Valid:         false,
 			ValidationMsg: fmt.Sprintf(`Flex time entry on line %d follows a clock-in, which is wrong.`, entry.LineNumber),
 		}
 	}
 
-	c.logState = stateFlex
-	c.durations = append(c.durations, *entry.Duration)
+	ls.logState = stateFlex
+	ls.durations = append(ls.durations, *entry.Duration)
 	return true, summary.Summary{}
 }
 
-func (c *logSummary) summarize() summary.Summary {
+func (ls *LogSummary) summarize() summary.Summary {
 	res := summary.Summary{
 		Valid: true,
 	}
 
 	sumDurations := time.Duration(0)
 
-	for _, d := range c.durations {
+	for _, d := range ls.durations {
 		sumDurations = sumDurations + d
 	}
 	res.TimeWorked = sumDurations
 
-	if sumDurations < c.fullDay {
-		timeLeft := c.fullDay - sumDurations
+	if sumDurations < ls.FullDay {
+		timeLeft := ls.FullDay - sumDurations
 		res.TimeLeft = &timeLeft
 
-		if c.logState == stateOn {
-			fullDayAt := c.lastOn.Add(timeLeft)
+		if ls.logState == stateOn {
+			fullDayAt := ls.lastOn.Add(timeLeft)
 			res.FullDayAt = &fullDayAt
 		}
 	}
 
-	if sumDurations > c.fullDay {
-		surplus := sumDurations - c.fullDay
+	if sumDurations > ls.FullDay {
+		surplus := sumDurations - ls.FullDay
 		res.Surplus = &surplus
 	}
 
-	for cat, dur := range c.taskCatDurations {
+	for cat, dur := range ls.taskCatDurations {
 		res.AddCategory(cat, dur)
 	}
 
-	if c.currentDate.Day != 0 && c.currentDate.Month != 0 {
+	if ls.currentDate.Day != 0 && ls.currentDate.Month != 0 {
 		res.Date = &summary.Date{
-			DayName: c.currentDate.DayName,
-			Day:     c.currentDate.Day,
-			Month:   c.currentDate.Month,
-			Year:    c.currentDate.Year,
+			DayName: ls.currentDate.DayName,
+			Day:     ls.currentDate.Day,
+			Month:   ls.currentDate.Month,
+			Year:    ls.currentDate.Year,
 		}
 	}
 
 	return res
 }
 
-// Formats:
-// 19:00 - Category
-// 19:00 - Category: Task
-func parseCategoryAndTask(s string) (category, task string) {
+func (ls *LogSummary) parseCategoryAndTask(s string) (category, task string) {
+	switch ls.CatParseMode {
+	case "v1":
+		return parseCategoryAndTaskV1(s)
+	case "v2":
+		return parseCategoryAndTaskV2(s)
+	}
+
+	return "error-invalidparsemode", "error"
+}
+
+// parseCategoryAndTaskV1 parses a string that might contain one of these two
+// formats:
+// "Category"
+// "Category: Task"
+func parseCategoryAndTaskV1(s string) (category, task string) {
 	if s == "" {
 		return "", ""
 	}
 
-	// todo: Add support for predefined categories
 	parts := strings.SplitN(s, ":", 2)
 	if len(parts) == 2 {
-		category = strings.ToLower(strings.TrimSpace(parts[0]))
-		task = strings.ToLower(strings.TrimSpace(parts[1]))
+		category = format.CleanParam(parts[0])
+		task = format.CleanParam(parts[1])
 		return category, task
 	}
 
-	category = strings.ToLower(strings.TrimSpace(s))
+	category = format.CleanParam(s)
 	return category, ""
 }
 
-func summaryDate(res *summary.Summary) string {
-
-	if res.Date == nil || res.Date.Day == 0 || res.Date.Month == 0 {
-		return formatTimestamp(time.Now())
+// parseCategoryAndTaskV2 parses a string that might contain a category, like
+// in v1. However, if no category is found, the category is set to
+// "uncategorized".
+func parseCategoryAndTaskV2(s string) (category, task string) {
+	if s == "" {
+		return summary.Uncategorized, ""
 	}
 
-	if res.Date.Year == 0 {
-		res.Date.Year = time.Now().Year()
+	parts := strings.SplitN(s, ":", 2)
+	if len(parts) == 2 {
+		category = format.CleanParam(parts[0])
+		task = format.CleanParam(parts[1])
+		return category, task
 	}
 
-	return fmt.Sprintf("%s %02d.%02d.%d", res.Date.DayName, res.Date.Day, res.Date.Month, res.Date.Year)
-}
-
-func formatTimestamp(ts time.Time) string {
-	return ts.Format("15:04")
+	task = format.CleanParam(s)
+	return summary.Uncategorized, task
 }
