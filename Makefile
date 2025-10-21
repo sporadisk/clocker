@@ -1,4 +1,4 @@
-.PHONY: build
+.PHONY: build test
 
 GOBIN := $(shell go env GOPATH)/bin
 
