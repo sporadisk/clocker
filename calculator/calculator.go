@@ -2,6 +2,7 @@ package calculator
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sporadisk/clocker/config"
@@ -18,6 +19,8 @@ type Calculator struct {
 	SummaryOutput     summary.Output
 	DefaultFullDay    time.Duration
 	CategoryParseMode string
+
+	eventInbox chan inboxEvent
 }
 
 func (c *Calculator) Start() error {
@@ -49,28 +52,17 @@ func (c *Calculator) Start() error {
 		c.CategoryParseMode = parseMode
 	}
 
+	// Start the inbox processing goroutine
+	c.eventInbox = make(chan inboxEvent, 100)
+	go c.WaitForEntries()
+
+	// Subscribe to log entries
 	err = c.Subscriber.Subscribe(c)
 	if err != nil {
 		return fmt.Errorf("Subscriber.Subscribe: %w", err)
 	}
-	return nil
-}
 
-func (c *Calculator) Receive(entries []logentry.Entry) error {
-	summary := &LogSummary{
-		Entries:      entries,
-		FullDay:      c.DefaultFullDay,
-		CatParseMode: c.CategoryParseMode,
-	}
-
-	err := c.SummaryOutput.OutputSummary(summary.Sum())
-	if err != nil {
-		return fmt.Errorf("SummaryOutput.Output: %w", err)
-	}
-
-	if c.EventExporter != nil {
-		// TODO: Generate exportable events during summary calculation
-	}
+	// Start the event processing loop
 	return nil
 }
 
@@ -87,4 +79,39 @@ func (c *Calculator) getDefaultFullDay() error {
 	// Fallback to 7.5 hours
 	c.DefaultFullDay = 450 * time.Minute
 	return nil
+}
+
+func (c *Calculator) AskAndExport(summaryEvents []*event.Event) error {
+	if !confirm(fmt.Sprintf("Export log events to %s?", c.Conf.Exporter.Name)) {
+		fmt.Println("Export denied.")
+		return nil
+	}
+
+	fmt.Println("Export started.")
+	err := c.EventExporter.Export(summaryEvents)
+	if err != nil {
+		return fmt.Errorf("EventExporter.Export: %w", err)
+	}
+	fmt.Println("Export completed.")
+
+	return nil
+}
+
+func confirm(prompt string) bool {
+	fmt.Printf("%s [y/n]: ", prompt)
+	var response string
+	_, err := fmt.Scanln(&response)
+	if err != nil {
+		fmt.Println("Error reading response:", err)
+		return false
+	}
+
+	validResponses := []string{"yes", "yep", "y"}
+	for _, vr := range validResponses {
+		if strings.EqualFold(response, vr) {
+			return true
+		}
+	}
+
+	return false
 }

@@ -1,7 +1,10 @@
 package timely
 
 import (
+	"context"
 	"fmt"
+	"net/url"
+	"path"
 	"time"
 
 	"github.com/sporadisk/clocker/client"
@@ -10,39 +13,106 @@ import (
 
 type Client struct {
 	// Configuration
-	Endpoint      string
+	ApiURL        string
 	ApplicationID string
 	ClientSecret  string
 	CallbackURL   string
+	AccountID     int
+	ProjectID     int
 
 	// State
-	HttpClient *client.HttpClient
-	token      *oauth2.Token
-	accountID  int64
+	HttpClient  *client.HttpClient
+	token       *oauth2.Token
+	oauthConfig *oauth2.Config
+	apiURL      *url.URL
+	labels      []Label
+	projects    []Project
+	tags        map[string]Label
+	user        User
 }
 
-func (c *Client) Init() error {
+func (c *Client) Init(ctx context.Context) error {
 	c.HttpClient = client.NewHttpClient(10 * time.Second)
-	if c.Endpoint == "" {
-		c.Endpoint = "https://api.timelyapp.com/1.1/"
+	if c.ApiURL == "" {
+		c.ApiURL = "https://api.timelyapp.com/"
 	}
+
+	apiURL, err := url.Parse(c.ApiURL)
+	if err != nil {
+		return fmt.Errorf("invalid ApiURL: %w", err)
+	}
+	c.apiURL = apiURL
+
+	err = c.setupOAuthConfig()
+	if err != nil {
+		return fmt.Errorf("setupOAuthConfig: %w", err)
+	}
+
+	err = c.getToken(ctx)
+	if err != nil {
+		return fmt.Errorf("getToken: %w", err)
+	}
+
+	err = c.SelectAccount()
+	if err != nil {
+		return fmt.Errorf("SelectAccount: %w", err)
+	}
+
+	fmt.Printf("Timely account ID selected: %d\n", c.AccountID)
+
+	err = c.GetAllLabels()
+	if err != nil {
+		return fmt.Errorf("GetAllLabels: %w", err)
+	}
+
+	err = c.GetProjects()
+	if err != nil {
+		return fmt.Errorf("GetProjects: %w", err)
+	}
+
+	projectList, err := c.ListProjects()
+	if err != nil {
+		return fmt.Errorf("ListProjects: %w", err)
+	}
+
+	if c.ProjectID == 0 {
+		fmt.Println("\nprojectId param has not been specified; please select one from the following list:")
+		fmt.Println(projectList)
+		return fmt.Errorf("projectId parameter is required")
+	}
+
+	project, ok := c.GetProjectByID(c.ProjectID)
+	if !ok || !project.Active {
+		fmt.Println("\nAvailable projects:")
+		fmt.Println(projectList)
+		return fmt.Errorf("projectId %d not found among available projects", c.ProjectID)
+	}
+
+	err = c.mapTags()
+	if err != nil {
+		return fmt.Errorf("mapTags: %w", err)
+	}
+
+	fmt.Printf("Project: %d (%s) / %d tags.\n", project.ID, project.Name, len(c.tags))
+
+	user, err := c.GetCurrentUser()
+	if err != nil {
+		return fmt.Errorf("GetCurrentUser: %w", err)
+	}
+	c.user = user
+	fmt.Printf("Current user: %d (%s)\n", user.ID, user.Name)
+
 	return nil
 }
 
-func (c *Client) LoadToken(token *oauth2.Token) {
-	c.token = token
-}
-
-func (c *Client) GetToken() *oauth2.Token {
-	return c.token
-}
-
-func (c *Client) HasToken() bool {
-	return c.token != nil && c.token.Valid()
+func (c *Client) timelyEndpoint(version, endpoint string) string {
+	u := *c.apiURL // make a copy of the base URL
+	u.Path = path.Join(version, endpoint)
+	return u.String()
 }
 
 func (c *Client) verifyToken() (bool, error) {
-	if !c.HasToken() {
+	if c.token == nil || !c.token.Valid() {
 		return false, nil
 	}
 
@@ -71,16 +141,4 @@ func (c *Client) prep() error {
 	}
 
 	return nil
-}
-
-func (c *Client) refreshToken() error {
-	// TODO: implement token refresh
-	return nil
-}
-
-func (c *Client) needTokenRefresh(now time.Time) bool {
-	if c.token == nil {
-		return true
-	}
-	return c.token.Expiry.Before(now.Add(168 * time.Hour)) // token expires in less than 7 days
 }

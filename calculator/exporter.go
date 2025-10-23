@@ -1,7 +1,9 @@
 package calculator
 
 import (
+	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/sporadisk/clocker/client/timely"
@@ -43,12 +45,30 @@ func TimelyExporter(params map[string]string) (*timely.Client, error) {
 		CallbackURL:   p["callbackUrl"],
 	}
 
+	// accountId is optional
 	accountID, ok := params["accountId"]
 	if ok {
-		err = client.SetAccountID(accountID)
+		accountIDInt, err := strconv.Atoi(accountID)
 		if err != nil {
-			return nil, fmt.Errorf("timely.Client.SetAccountID: %w", err)
+			return nil, fmt.Errorf("can't parse accountId as int: %w", err)
 		}
+		client.AccountID = accountIDInt
+	}
+
+	// projectId is required, but we handle that in the client, to make it
+	// easier to find a project-id to use.
+	projectId, ok := params["projectId"]
+	if ok {
+		projectIDInt, err := strconv.Atoi(projectId)
+		if err != nil {
+			return nil, fmt.Errorf("can't parse projectId as int: %w", err)
+		}
+		client.ProjectID = projectIDInt
+	}
+
+	err = client.Init(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("timely.Client.Init: %w", err)
 	}
 
 	return client, nil

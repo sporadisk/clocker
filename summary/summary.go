@@ -1,6 +1,7 @@
 package summary
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -26,6 +27,10 @@ type Date struct {
 	Day     int
 	Month   int
 	Year    int
+}
+
+func (sd *Date) String() string {
+	return fmt.Sprintf("%04d-%02d-%02d", sd.Year, sd.Month, sd.Day)
 }
 
 type ResultCategory struct {

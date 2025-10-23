@@ -1,5 +1,5 @@
 package event
 
 type Exporter interface {
-	Export(events []Event) error
+	Export(events []*Event) error
 }

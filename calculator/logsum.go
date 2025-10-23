@@ -35,10 +35,10 @@ type LogSummary struct {
 	currentCategory  string
 	currentTask      string
 	currentDate      summary.Date
-	events           []event.Event
+	events           []*event.Event
 }
 
-func (ls *LogSummary) Sum() summary.Summary {
+func (ls *LogSummary) Sum() (summary.Summary, []*event.Event) {
 
 	ls.logState = stateInit
 	ls.lastOn = time.Time{}
@@ -46,6 +46,7 @@ func (ls *LogSummary) Sum() summary.Summary {
 	ls.durations = []time.Duration{}
 	ls.taskCatDurations = map[string]time.Duration{}
 	ls.prevCommand = "--start of document--"
+	ls.events = []*event.Event{}
 
 	if ls.CatParseMode != "" {
 		ls.CatParseMode = format.CleanParam(ls.CatParseMode)
@@ -57,14 +58,14 @@ func (ls *LogSummary) Sum() summary.Summary {
 		return summary.Summary{
 			Valid:         false,
 			ValidationMsg: "No valid time entries detected.",
-		}
+		}, nil
 	}
 
 	for _, entry := range ls.Entries {
 		if entry.Action == logentry.ActionClockIn {
 			success, res := ls.clockIn(entry)
 			if !success {
-				return res
+				return res, nil
 			}
 		}
 
@@ -72,21 +73,21 @@ func (ls *LogSummary) Sum() summary.Summary {
 			category, task := ls.parseCategoryAndTask(entry.Task)
 			success, res := ls.startTask(entry, category, task)
 			if !success {
-				return res
+				return res, nil
 			}
 		}
 
 		if entry.Action == logentry.ActionClockOut {
 			success, res := ls.clockOut(entry)
 			if !success {
-				return res
+				return res, nil
 			}
 		}
 
 		if entry.Action == logentry.ActionFlex {
 			success, res := ls.flex(entry)
 			if !success {
-				return res
+				return res, nil
 			}
 		}
 
@@ -95,7 +96,7 @@ func (ls *LogSummary) Sum() summary.Summary {
 				return summary.Summary{
 					Valid:         false,
 					ValidationMsg: fmt.Sprintf(`"%s" entry on line %d follows a clock-in, which is wrong.`, entry.Command, entry.LineNumber),
-				}
+				}, nil
 			}
 
 			ls.logState = stateTarget
@@ -115,7 +116,7 @@ func (ls *LogSummary) Sum() summary.Summary {
 	}
 
 	// validation and duration collection complete: Time to calculate
-	return ls.summarize()
+	return ls.summarize(), ls.events
 }
 
 func (ls *LogSummary) clockOut(entry logentry.Entry) (success bool, result summary.Summary) {
@@ -141,11 +142,35 @@ func (ls *LogSummary) clockOut(entry logentry.Entry) (success bool, result summa
 		ls.addToCategory(ls.currentCategory, entry.Timestamp.Sub(ls.lastOn))
 	}
 
+	eventCategory := ls.currentCategory
+	if eventCategory == "" {
+		eventCategory = summary.Uncategorized
+	}
+
+	event := &event.Event{
+		Start:    eventTimeStamp(ls.currentDate, ls.lastOn),
+		End:      eventTimeStamp(ls.currentDate, ls.lastOff),
+		Category: eventCategory,
+		Task:     ls.currentTask,
+		Date: event.EventDate{
+			Day:   ls.currentDate.Day,
+			Month: ls.currentDate.Month,
+			Year:  ls.currentDate.Year,
+		},
+	}
+	event.DetermineHours()
+	ls.events = append(ls.events, event)
+
 	// reset current task and category
 	ls.currentTask = ""
 	ls.currentCategory = ""
 
 	return true, summary.Summary{}
+}
+
+// the log-entry timestamps lack a date, so we need to supply that
+func eventTimeStamp(d summary.Date, t time.Time) time.Time {
+	return time.Date(d.Year, time.Month(d.Month), d.Day, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
 }
 
 func (ls *LogSummary) addToCategory(cat string, dur time.Duration) {
