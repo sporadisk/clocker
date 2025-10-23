@@ -2,10 +2,11 @@ package calculator
 
 import (
 	"fmt"
-	"strings"
+	"os"
 	"time"
 
 	"github.com/sporadisk/clocker/config"
+	"github.com/sporadisk/clocker/console"
 	"github.com/sporadisk/clocker/event"
 	"github.com/sporadisk/clocker/logentry"
 	"github.com/sporadisk/clocker/parameter"
@@ -54,7 +55,13 @@ func (c *Calculator) Start() error {
 
 	// Start the inbox processing goroutine
 	c.eventInbox = make(chan inboxEvent, 100)
-	go c.WaitForEntries()
+	go func() {
+		err := c.WaitForEntries()
+		if err != nil {
+			fmt.Printf("WaitForEntries: %s\n", err.Error())
+			os.Exit(1)
+		}
+	}()
 
 	// Subscribe to log entries
 	err = c.Subscriber.Subscribe(c)
@@ -82,7 +89,7 @@ func (c *Calculator) getDefaultFullDay() error {
 }
 
 func (c *Calculator) AskAndExport(summaryEvents []*event.Event) error {
-	if !confirm(fmt.Sprintf("Export log events to %s?", c.Conf.Exporter.Name)) {
+	if !console.Confirm(fmt.Sprintf("Export log events to %s?", c.Conf.Exporter.Name)) {
 		fmt.Println("Export denied.")
 		return nil
 	}
@@ -95,23 +102,4 @@ func (c *Calculator) AskAndExport(summaryEvents []*event.Event) error {
 	fmt.Println("Export completed.")
 
 	return nil
-}
-
-func confirm(prompt string) bool {
-	fmt.Printf("%s [y/n]: ", prompt)
-	var response string
-	_, err := fmt.Scanln(&response)
-	if err != nil {
-		fmt.Println("Error reading response:", err)
-		return false
-	}
-
-	validResponses := []string{"yes", "yep", "y"}
-	for _, vr := range validResponses {
-		if strings.EqualFold(response, vr) {
-			return true
-		}
-	}
-
-	return false
 }

@@ -19,6 +19,7 @@ type Client struct {
 	CallbackURL   string
 	AccountID     int
 	ProjectID     int
+	DebugMode     bool // Will occasionally get used for debugging
 
 	// State
 	HttpClient  *client.HttpClient
