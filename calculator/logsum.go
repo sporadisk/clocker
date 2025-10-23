@@ -170,7 +170,12 @@ func (ls *LogSummary) clockOut(entry logentry.Entry) (success bool, result summa
 
 // the log-entry timestamps lack a date, so we need to supply that
 func eventTimeStamp(d summary.Date, t time.Time) time.Time {
-	return time.Date(d.Year, time.Month(d.Month), d.Day, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), t.Location())
+	// get the current local timestamp, in order to use its location
+	now := time.Now()
+
+	// construct a new time.Time with the date from `d`, the time from `t` and
+	// the timezone from `now`
+	return time.Date(d.Year, time.Month(d.Month), d.Day, t.Hour(), t.Minute(), t.Second(), t.Nanosecond(), now.Location())
 }
 
 func (ls *LogSummary) addToCategory(cat string, dur time.Duration) {
