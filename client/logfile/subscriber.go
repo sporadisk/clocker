@@ -1,4 +1,4 @@
-package filewatcher
+package logfile
 
 import (
 	"fmt"
@@ -9,34 +9,42 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sporadisk/clocker"
+	"github.com/sporadisk/clocker/logentry"
 )
 
-func Watch(filePath string) {
+type Subscriber struct {
+	filePath string
+	lastRead time.Time
+	mu       sync.Mutex
+	receiver logentry.Receiver
+}
+
+func NewSubscriber(filePath string) (*Subscriber, error) {
+	return &Subscriber{filePath: filePath}, nil
+}
+
+func (s *Subscriber) Subscribe(receiver logentry.Receiver) error {
+	s.receiver = receiver
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal("fsnotify.NewWatcher: " + err.Error())
 	}
 	defer watcher.Close()
 
-	su := &surveyer{}
-	go su.watchResponder(watcher)
+	go s.watchResponder(watcher)
 
-	err = watcher.Add(filePath)
+	err = watcher.Add(s.filePath)
 	if err != nil {
 		log.Fatal("watcher.Add: " + err.Error())
 	}
 
 	// Block main goroutine forever.
+	// TODO: implement proper shutdown handling
 	<-make(chan struct{})
+	return nil
 }
 
-type surveyer struct {
-	lastRead time.Time
-	mu       sync.Mutex
-}
-
-func (su *surveyer) watchResponder(watcher *fsnotify.Watcher) {
+func (s *Subscriber) watchResponder(watcher *fsnotify.Watcher) {
 
 	for {
 		select {
@@ -46,7 +54,7 @@ func (su *surveyer) watchResponder(watcher *fsnotify.Watcher) {
 				return
 			}
 			if event.Has(fsnotify.Write) {
-				err := su.reactToFileWrite(event.Name)
+				err := s.reactToFileWrite(event.Name)
 				if err != nil {
 					log.Printf("reactToFileWrite: %s", err.Error())
 					return
@@ -63,18 +71,18 @@ func (su *surveyer) watchResponder(watcher *fsnotify.Watcher) {
 	}
 }
 
-func (su *surveyer) reactToFileWrite(filepath string) error {
-	su.mu.Lock()
-	defer su.mu.Unlock()
+func (s *Subscriber) reactToFileWrite(filepath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	timeElapsed := time.Since(su.lastRead)
+	timeElapsed := time.Since(s.lastRead)
 	if timeElapsed < time.Second { // react at most once per second
 		return nil
 	}
-	su.lastRead = time.Now()
+	s.lastRead = time.Now()
 
-	lp := clocker.LogParser{}
-	err := lp.Init("")
+	lp := LogParser{}
+	err := lp.Init()
 	if err != nil {
 		return fmt.Errorf("lp.Init: %w", err)
 	}
@@ -84,14 +92,11 @@ func (su *surveyer) reactToFileWrite(filepath string) error {
 		return fmt.Errorf("readLoop: %w", err)
 	}
 
-	summary, err := lp.Summary(string(b))
-	fmt.Print(summary)
+	entries := lp.Parse(string(b))
+	err = s.receiver.Receive(entries)
 
 	if err != nil {
-		if err == clocker.ErrInvalidInput {
-			fmt.Printf("Input: %q\n", string(b))
-		}
-		return fmt.Errorf("lp.Summary: %w", err)
+		return fmt.Errorf("error from log entry receiver: %w", err)
 	}
 
 	return nil

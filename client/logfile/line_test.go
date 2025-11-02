@@ -1,9 +1,11 @@
-package clocker
+package logfile
 
 import (
 	"log"
 	"testing"
 	"time"
+
+	"github.com/sporadisk/clocker/logentry"
 )
 
 func TestParseLine(t *testing.T) {
@@ -17,7 +19,7 @@ func TestParseLine(t *testing.T) {
 	}
 
 	lp := LogParser{}
-	err := lp.Init("")
+	err := lp.Init()
 	if err != nil {
 		t.Errorf("lp.Init: %s", err.Error())
 		return
@@ -35,41 +37,41 @@ func TestParseLine(t *testing.T) {
 				return
 			}
 
-			if entry.action != te.expected.action {
-				t.Errorf("action mismatch: expected %s, got %s", te.expected.action, entry.action)
+			if entry.Action != te.expected.Action {
+				t.Errorf("action mismatch: expected %s, got %s", te.expected.Action, entry.Action)
 				return
 			}
 
-			if te.expected.duration != nil {
-				if entry.duration == nil {
+			if te.expected.Duration != nil {
+				if entry.Duration == nil {
 					t.Errorf("expected a duration, but it was nil")
 					return
 				}
-				if *entry.duration != *te.expected.duration {
-					t.Errorf("duration mismatch: expected %f, got %f", te.expected.duration.Minutes(), entry.duration.Minutes())
+				if *entry.Duration != *te.expected.Duration {
+					t.Errorf("duration mismatch: expected %f, got %f", te.expected.Duration.Minutes(), entry.Duration.Minutes())
 					return
 				}
 			} else {
-				if entry.duration != nil {
-					t.Errorf("expected duration to be nil, but it was %f", entry.duration.Minutes())
+				if entry.Duration != nil {
+					t.Errorf("expected duration to be nil, but it was %f", entry.Duration.Minutes())
 					return
 				}
 			}
 
-			if te.expected.timestamp != nil {
-				if entry.timestamp == nil {
+			if te.expected.Timestamp != nil {
+				if entry.Timestamp == nil {
 					t.Errorf("expected a timestamp, but it was nil")
 					return
 				}
-				if !entry.timestamp.Equal(*te.expected.timestamp) {
+				if !entry.Timestamp.Equal(*te.expected.Timestamp) {
 					t.Errorf("timestamp mismatch!\nExpected: %s\nGot     : %s",
-						te.expected.timestamp.Format(time.RFC3339),
-						entry.timestamp.Format(time.RFC3339))
+						te.expected.Timestamp.Format(time.RFC3339),
+						entry.Timestamp.Format(time.RFC3339))
 					return
 				}
 			} else {
-				if entry.timestamp != nil {
-					t.Errorf("expected timestamp to be nil, but it was %s", entry.timestamp.Format(time.RFC3339))
+				if entry.Timestamp != nil {
+					t.Errorf("expected timestamp to be nil, but it was %s", entry.Timestamp.Format(time.RFC3339))
 					return
 				}
 			}
@@ -81,8 +83,8 @@ func newTestLine(line string) *testLine {
 	return &testLine{
 		line:  line,
 		valid: true,
-		expected: clockEntry{
-			action: "",
+		expected: logentry.Entry{
+			Action: "",
 		},
 	}
 }
@@ -90,7 +92,7 @@ func newTestLine(line string) *testLine {
 type testLine struct {
 	line     string
 	valid    bool
-	expected clockEntry
+	expected logentry.Entry
 }
 
 func (tl *testLine) expectInvalid() *testLine {
@@ -99,7 +101,7 @@ func (tl *testLine) expectInvalid() *testLine {
 }
 
 func (tl *testLine) expectAction(action string) *testLine {
-	tl.expected.action = action
+	tl.expected.Action = action
 	return tl
 }
 
@@ -109,7 +111,7 @@ func (tl *testLine) expectTimestamp(ts string) *testLine {
 		log.Printf("time parse error: %s", err.Error())
 		return tl
 	}
-	tl.expected.timestamp = &timestamp
+	tl.expected.Timestamp = &timestamp
 	return tl
 }
 
@@ -119,6 +121,6 @@ func (tl *testLine) expectDuration(ds string) *testLine {
 		log.Printf("duration parse error: %s", err.Error())
 		return tl
 	}
-	tl.expected.duration = &duration
+	tl.expected.Duration = &duration
 	return tl
 }
